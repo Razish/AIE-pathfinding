@@ -107,6 +107,7 @@ namespace XS {
 
 		std::map<std::string, Cvar *> sorted( cvars.begin(), cvars.end() );
 		std::vector<std::string> keyValues;
+		keyValues.reserve( sorted.size() );
 
 		Indent indent( 1 );
 		size_t maxLen = 1u;
