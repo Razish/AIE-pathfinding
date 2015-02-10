@@ -24,6 +24,16 @@ namespace XS {
 		static Renderer::View *sceneView = nullptr;
 		static constexpr size_t dimensions[2] = { 32u, 18u };
 
+		// each tile acts as a node in the graph to search
+		// a tile has a specific type (e.g. start, goal, wall)
+		// the only identifying property of a tile is the position, which is inferred by the tilemap
+
+		// references for A* pathfinding:
+		//	https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
+		//	http://www.policyalmanac.org/games/aStarTutorial.htm
+		//	http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+		//	http://code.activestate.com/recipes/577457-a-star-shortest-path-algorithm/
+
 		enum class TileType {
 			Blank,
 			Wall,
@@ -44,8 +54,7 @@ namespace XS {
 		};
 
 		struct Tile {
-			uint32_t	x;
-			uint32_t	y;
+			int32_t		x, y;
 
 			// a cost of -1 means it is an unmoveable direction (i.e. off the map)
 			// the lower the cost, the better the move
@@ -86,7 +95,7 @@ namespace XS {
 
 			// we've moved, so recalculate the path
 			bool Reconstruct(
-				const Tile *current,
+				const Tile *start,
 				const Tile *goal
 			);
 
@@ -122,11 +131,17 @@ namespace XS {
 
 				case Algorithm::AStar: {
 					Tile delta = {
-						.x = t2->x - t1->x,
-						.y = t2->y - t1->y
+						.x = std::abs( t2->x - t1->x ),
+						.y = std::abs( t2->y - t1->y )
 					};
-					// * by 8 to alleviate lack of integer precision
-					return static_cast<int16_t>( sqrt( delta.x*delta.x + delta.y*delta.y ) * 8 );
+
+					// euclidean distance
+					//	* by 8 to alleviate lack of integer precision
+					//return static_cast<int16_t>( sqrt( delta.x*delta.x + delta.y*delta.y ) * 8 );
+
+					// custom
+					//	abuse integer truncation to add negative weight to diagonal moves
+					return static_cast<int16_t>( delta.x * 1.5f ) + static_cast<int16_t>( delta.y * 1.5f );
 				} break;
 
 				default: {
@@ -139,8 +154,10 @@ namespace XS {
 			return 0;
 		}
 
-		bool Path::Reconstruct( const Tile *current, const Tile *goal ) {
-			// ...
+		bool Path::Reconstruct( const Tile *start, const Tile *goal ) {
+			//TODO: backtrack from the goal position to the start position based on which order we traversed the
+			//	nodes
+			//TODO: smooth the path
 			return false;
 		}
 
@@ -155,6 +172,7 @@ namespace XS {
 						int16_t lowestF = INT16_MAX;
 
 						// current = node in open list with lowest f score
+						// F=G+H
 						for ( Tile *tile : openList ) {
 							int16_t thisG = 0;
 							int16_t thisH = HeuristicCost( tile, goal );
@@ -176,7 +194,7 @@ namespace XS {
 						// wut?
 						if ( current == goal ) {
 							console.Print( "Found the goal\n" );
-						//	openList.clear();
+							openList.clear();
 							//Reconstruct( start, goal );
 							break;
 						}
