@@ -35,8 +35,7 @@ $ dpkg -i ./*.deb
 
 ## Mac ##
 
-There is currently no support for Mac, though xsngine aims to be platform-agnostic as can be.
-The scons project may work. The code will likely work.
+You may need to install dependencies via brew. Most of the code and usage is the same as Linux.
 
 # Debugging #
 All the provided project files assume there is an executable file named `pathfinding` in the current working directory.
