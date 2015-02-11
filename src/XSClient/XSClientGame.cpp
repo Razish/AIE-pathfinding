@@ -83,8 +83,8 @@ namespace XS {
 			// tiles are added to the open list if it's to be explored
 			// when a tile is determined to be unsuitable, it's moved to the closed list and never checked again
 			nodeList				openList, closedList;
+			nodeList				result;
 			std::map<Tile*, Tile*>	cameFrom;
-			nodeList				path;
 			Algorithm				algorithm;
 
 			// calculate the H cost of moving from t1 to t2
@@ -93,16 +93,17 @@ namespace XS {
 				const Tile *t2
 			);
 
-			// we've moved, so recalculate the path
-			bool Reconstruct(
-				const Tile *start,
-				const Tile *goal
+			// we've reached the goal, so backtrack to the start node and return that path
+			void Backtrack(
+				Tile *tile,
+				nodeList &route
 			);
 
 			// construct a path from current tile to goal tile
-			nodeList Find(
+			bool Find(
 				Tile *current,
-				Tile *goal
+				Tile *goal,
+				nodeList &route
 			);
 		};
 
@@ -154,21 +155,23 @@ namespace XS {
 			return 0;
 		}
 
-		bool Path::Reconstruct( const Tile *start, const Tile *goal ) {
+		void Path::Backtrack( Tile *tile, nodeList &route ) {
 			//TODO: backtrack from the goal position to the start position based on which order we traversed the
 			//	nodes
+			while ( tile ) {
+				route.insert( route.begin(), tile );
+				tile = cameFrom[tile];
+			}
 			//TODO: smooth the path
-			return false;
 		}
 
-		nodeList Path::Find( Tile *current, Tile *goal ) {
+		bool Path::Find( Tile *current, Tile *goal, nodeList &route ) {
+			bool finished = false;
+
 			switch( algorithm ) {
 
 				case Algorithm::AStar: {
 					if ( !openList.empty() ) {
-						console.Print( "Open list is not empty\n" );
-						Indent indentListIsOpen( 1 );
-
 						int16_t lowestF = INT16_MAX;
 
 						// current = node in open list with lowest f score
@@ -178,41 +181,27 @@ namespace XS {
 							int16_t thisH = HeuristicCost( tile, goal );
 							int16_t thisF = thisG + thisH;
 							if ( thisF < lowestF ) {
-								console.Print(
-									"%i < %i, selecting tile at %i,%i\n",
-									thisF,
-									lowestF,
-									tile->x,
-									tile->y
-								);
 								lowestF = thisF;
 								current = tile;
 							}
 						}
 
-#if 1
 						// wut?
 						if ( current == goal ) {
-							console.Print( "Found the goal\n" );
-							openList.clear();
-							//Reconstruct( start, goal );
+							//openList.clear();
+							Backtrack( current, route );
+							finished = true;
 							break;
 						}
-#endif
+
 						// drop it from the openList, add it to the closedList
 						auto it = std::find( openList.begin(), openList.end(), current );
 						if ( it != openList.end() ) {
-							console.Print(
-								"Removing %i,%i from openList, moving to closedList\n",
-								current->x,
-								current->y
-							);
 							openList.erase( it );
 							closedList.push_back( current );
 						}
 
 						// then look at its neighbours
-						console.Print( "Searching neighbours...\n" );
 						for ( Tile *neighbour : current->neighbours ) {
 							if ( neighbour == nullptr ) {
 								continue;
@@ -220,13 +209,8 @@ namespace XS {
 
 							// only add tiles we can navigate to.
 							if ( neighbour->type == TileType::Wall ) {
-								console.Print( "Ignoring wall at %i,%i\n", neighbour->x, neighbour->y );
 								continue;
 							}
-
-							console.Print( "Looking at neighbour %i,%i\n", neighbour->x, neighbour->y );
-
-							Indent indentNeighbours( 1 );
 
 							// if this neighbour is in the closedList, skip it
 							if ( std::find( closedList.begin(), closedList.end(), neighbour ) != closedList.end() ) {
@@ -244,7 +228,6 @@ namespace XS {
 								state.fScore[neighbour] = state.gScore[neighbour] + HeuristicCost( neighbour, goal );
 								// if neighbour is not in the open set
 								if ( std::find( openList.begin(), openList.end(), neighbour ) == openList.end() ) {
-									console.Print( "Adding %i,%i to openList\n", neighbour->x, neighbour->y );
 									openList.push_back( neighbour );
 									openList = std::vector<Tile *>( openList.begin(), openList.end() );
 								}
@@ -259,7 +242,7 @@ namespace XS {
 
 			}
 
-			return path;
+			return finished;
 		}
 
 		static void RenderScene( void ) {
@@ -363,40 +346,12 @@ namespace XS {
 			//	5 iterations?
 		}
 
-		static void PrintMaze( void ) {
-			for ( size_t x = 0u; x < dimensions[0]; x++ ) {
-				for ( size_t y = 0u; y < dimensions[1]; y++ ) {
-					switch( GetTileType( x, y ) ) {
-
-					case TileType::Blank: {
-						console.Print( "  " );
-					} break;
-
-					case TileType::Wall: {
-						console.Print( "# " );
-					} break;
-
-					case TileType::Start: {
-						console.Print( "S " );
-					} break;
-
-					case TileType::Goal: {
-						console.Print( "G " );
-					} break;
-
-					}
-				}
-				console.Print( "\n" );
-			}
-		}
-
 		void Init( void ) {
 			const uint32_t width = Cvar::Get( "vid_width" )->GetInt();
 			const uint32_t height = Cvar::Get( "vid_height" )->GetInt();
 			sceneView = new Renderer::View( width, height, RenderScene );
 
 			GenerateMaze();
-			PrintMaze();
 			state.path.algorithm = Path::Algorithm::AStar;
 			state.path.closedList.clear();
 			// populate the open list with the start position
@@ -411,9 +366,9 @@ namespace XS {
 		void RunFrame( void ) {
 			static double lastTime = 0.0;
 			const double currentTime = Client::GetElapsedTime();
-			if ( lastTime < currentTime - 250 ) {
-				// step every 750ms
-				state.path.Find( state.start, state.goal );
+			if ( lastTime < currentTime - 150 ) {
+				// step every 150ms
+				state.path.Find( state.start, state.goal, state.route );
 				lastTime = currentTime;
 			}
 		}
@@ -443,6 +398,9 @@ namespace XS {
 							!= state.path.closedList.end() )
 						{
 							colour = &colourTable[ColourIndex( COLOUR_ORANGE )];
+						}
+						if ( std::find( state.route.begin(), state.route.end(), tile ) != state.route.end() ) {
+							colour = &colourTable[ColourIndex( COLOUR_BLUE )];
 						}
 					} break;
 
